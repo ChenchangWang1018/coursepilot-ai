@@ -8,6 +8,7 @@ type UploadResult = {
   num_pages: number;
   text_preview: string;
   summary: StudySummary;
+  quiz: QuizItem[];
 };
 
 type StudySummary = {
@@ -16,6 +17,17 @@ type StudySummary = {
   important_concepts: string[];
   formulas_or_definitions: string[];
   suggested_review_order: string[];
+};
+
+type QuizItem = {
+  id: number;
+  question: string;
+  type: "multiple_choice" | "true_false" | "short_answer";
+  topic: string;
+  difficulty: "easy" | "medium" | "hard";
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string;
 };
 
 type SummaryListProps = {
@@ -44,17 +56,23 @@ function SummaryList({ title, items }: SummaryListProps) {
   );
 }
 
+function formatLabel(value: string) {
+  return value.replace("_", " ");
+}
+
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [visibleAnswers, setVisibleAnswers] = useState<number[]>([]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setSelectedFile(file);
     setResult(null);
     setError("");
+    setVisibleAnswers([]);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -71,6 +89,7 @@ export default function UploadPage() {
     setIsUploading(true);
     setError("");
     setResult(null);
+    setVisibleAnswers([]);
 
     try {
       const response = await fetch("http://localhost:8000/upload", {
@@ -89,6 +108,14 @@ export default function UploadPage() {
     } finally {
       setIsUploading(false);
     }
+  }
+
+  function toggleAnswer(questionId: number) {
+    setVisibleAnswers((current) =>
+      current.includes(questionId)
+        ? current.filter((id) => id !== questionId)
+        : [...current, questionId],
+    );
   }
 
   return (
@@ -188,6 +215,75 @@ export default function UploadPage() {
                 title="Suggested review order"
                 items={result.summary.suggested_review_order}
               />
+            </div>
+          </div>
+        ) : null}
+
+        {result ? (
+          <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-950">Practice quiz</h2>
+            <div className="mt-6 space-y-5">
+              {result.quiz.map((item, index) => {
+                const isAnswerVisible = visibleAnswers.includes(item.id);
+
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-5"
+                  >
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+                      <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                        {formatLabel(item.type)}
+                      </span>
+                      <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                        {item.topic}
+                      </span>
+                      <span className="rounded-full bg-white px-3 py-1 text-slate-600">
+                        {item.difficulty}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-4 font-semibold leading-7 text-slate-950">
+                      {index + 1}. {item.question}
+                    </h3>
+
+                    {item.options ? (
+                      <ul className="mt-4 space-y-2 text-slate-700">
+                        {item.options.map((option) => (
+                          <li key={option} className="rounded-md bg-white px-3 py-2">
+                            {option}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => toggleAnswer(item.id)}
+                      className="mt-5 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                    >
+                      {isAnswerVisible ? "Hide answer" : "Show answer"}
+                    </button>
+
+                    {isAnswerVisible ? (
+                      <div className="mt-4 rounded-md bg-white p-4 text-sm leading-6 text-slate-700">
+                        <p>
+                          <span className="font-semibold text-slate-950">
+                            Correct answer:
+                          </span>{" "}
+                          {item.correct_answer}
+                        </p>
+                        <p className="mt-2">
+                          <span className="font-semibold text-slate-950">
+                            Explanation:
+                          </span>{" "}
+                          {item.explanation}
+                        </p>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           </div>
         ) : null}

@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.pdf import extract_pdf_text
+from app.quiz import generate_quiz
 from app.summary import generate_study_summary
 
 app = FastAPI(title="CoursePilot AI API")
@@ -21,7 +22,9 @@ def health() -> dict[str, str]:
 
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)) -> dict[str, str | int | dict[str, str | list[str]]]:
+async def upload_pdf(
+    file: UploadFile = File(...),
+) -> dict[str, str | int | dict[str, str | list[str]] | list[dict[str, str | int | list[str] | None]]]:
     filename = file.filename or "uploaded.pdf"
 
     if file.content_type != "application/pdf" and not filename.lower().endswith(".pdf"):
@@ -32,6 +35,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, str | int | dict
     try:
         num_pages, full_text = extract_pdf_text(file_bytes)
         summary = generate_study_summary(full_text)
+        quiz = generate_quiz(full_text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -42,4 +46,5 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, str | int | dict
         "num_pages": num_pages,
         "text_preview": full_text[:2000],
         "summary": summary,
+        "quiz": quiz,
     }
