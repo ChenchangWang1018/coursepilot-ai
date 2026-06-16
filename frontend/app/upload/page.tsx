@@ -7,7 +7,42 @@ type UploadResult = {
   filename: string;
   num_pages: number;
   text_preview: string;
+  summary: StudySummary;
 };
+
+type StudySummary = {
+  overview: string;
+  main_topics: string[];
+  important_concepts: string[];
+  formulas_or_definitions: string[];
+  suggested_review_order: string[];
+};
+
+type SummaryListProps = {
+  title: string;
+  items: string[];
+};
+
+function SummaryList({ title, items }: SummaryListProps) {
+  return (
+    <section>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+      {items.length > 0 ? (
+        <ul className="mt-3 space-y-2 text-slate-700">
+          {items.map((item) => (
+            <li key={item} className="rounded-md bg-slate-50 px-3 py-2">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-slate-500">No items returned.</p>
+      )}
+    </section>
+  );
+}
 
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -126,6 +161,34 @@ export default function UploadPage() {
             <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-sm leading-6 text-slate-100">
               {result.text_preview || "No extractable text found in this PDF."}
             </pre>
+          </div>
+        ) : null}
+
+        {result ? (
+          <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-950">Study summary</h2>
+            <section className="mt-5">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Overview
+              </h3>
+              <p className="mt-3 leading-7 text-slate-700">{result.summary.overview}</p>
+            </section>
+
+            <div className="mt-8 grid gap-8">
+              <SummaryList title="Main topics" items={result.summary.main_topics} />
+              <SummaryList
+                title="Important concepts"
+                items={result.summary.important_concepts}
+              />
+              <SummaryList
+                title="Formulas or definitions"
+                items={result.summary.formulas_or_definitions}
+              />
+              <SummaryList
+                title="Suggested review order"
+                items={result.summary.suggested_review_order}
+              />
+            </div>
           </div>
         ) : null}
       </section>

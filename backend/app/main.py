@@ -1,6 +1,8 @@
-import fitz
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.pdf import extract_pdf_text
+from app.summary import generate_study_summary
 
 app = FastAPI(title="CoursePilot AI API")
 
@@ -19,28 +21,25 @@ def health() -> dict[str, str]:
 
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)) -> dict[str, str | int]:
+async def upload_pdf(file: UploadFile = File(...)) -> dict[str, str | int | dict[str, str | list[str]]]:
     filename = file.filename or "uploaded.pdf"
 
     if file.content_type != "application/pdf" and not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="The uploaded PDF is empty.")
 
     try:
-        with fitz.open(stream=file_bytes, filetype="pdf") as document:
-            page_text = [page.get_text() for page in document]
-            full_text = "\n".join(page_text).strip()
+        num_pages, full_text = extract_pdf_text(file_bytes)
+        summary = generate_study_summary(full_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-            return {
-                "filename": filename,
-                "num_pages": document.page_count,
-                "text_preview": full_text[:2000],
-            }
-    except (fitz.FileDataError, ValueError, RuntimeError) as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="The uploaded PDF could not be read.",
-        ) from exc
+    return {
+        "filename": filename,
+        "num_pages": num_pages,
+        "text_preview": full_text[:2000],
+        "summary": summary,
+    }
