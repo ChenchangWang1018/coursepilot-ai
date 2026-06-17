@@ -2,7 +2,7 @@ import logging
 import os
 
 from openai import OpenAI, OpenAIError
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MAX_SUMMARY_INPUT_CHARS = 12000
 OPENAI_MODEL = "gpt-5.5"
@@ -10,14 +10,38 @@ OPENAI_MODEL = "gpt-5.5"
 logger = logging.getLogger(__name__)
 
 
+class KeyTopic(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    summary: str
+    details: str
+
+    @field_validator("summary")
+    @classmethod
+    def summary_is_one_sentence(cls, value: str) -> str:
+        sentence_count = sum(value.count(mark) for mark in ".!?")
+        if sentence_count > 1:
+            raise ValueError("Key topic summary must be one sentence.")
+        return value
+
+
 class StudySummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     overview: str
-    main_topics: list[str]
-    important_concepts: list[str]
-    formulas_or_definitions: list[str]
+    key_topics: list[KeyTopic]
+    must_know: list[str] = Field(max_length=6)
+    common_mistakes: list[str] = Field(max_length=5)
     suggested_review_order: list[str]
+
+    @field_validator("overview")
+    @classmethod
+    def overview_has_at_most_three_sentences(cls, value: str) -> str:
+        sentence_count = sum(value.count(mark) for mark in ".!?")
+        if sentence_count > 3:
+            raise ValueError("Overview must be no more than 3 sentences.")
+        return value
 
 
 def generate_study_summary(text: str) -> dict[str, str | list[str]]:
@@ -38,15 +62,20 @@ def generate_study_summary(text: str) -> dict[str, str | list[str]]:
                 {
                     "role": "system",
                     "content": (
-                        "You create concise, useful study summaries for students. "
-                        "Return only the requested structured JSON."
+                        "You create concise, exam-relevant study summaries for students. "
+                        "Prioritize useful concepts, reduce repetition, and return only "
+                        "the requested structured JSON."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
                         "Create a structured study summary from this course text. "
-                        "Focus on what a student should understand and review.\n\n"
+                        "The overview must be no more than 3 sentences. Each key topic "
+                        "needs a name, a one-sentence summary, and short practical details. "
+                        "Include no more than 6 must-know items, no more than 5 common "
+                        "mistakes, and a concise suggested review order. Focus on what is "
+                        "most likely useful for exams and avoid repeating the same idea.\n\n"
                         f"{summary_input}"
                     ),
                 },
@@ -60,6 +89,7 @@ def generate_study_summary(text: str) -> dict[str, str | list[str]]:
                 }
             },
         )
+        return StudySummary.model_validate_json(response.output_text).model_dump()
     except OpenAIError as exc:
         logger.exception(
             "OpenAI summary generation failed: %s: %s",
@@ -67,5 +97,10 @@ def generate_study_summary(text: str) -> dict[str, str | list[str]]:
             exc,
         )
         raise RuntimeError("OpenAI summary generation failed.") from exc
-
-    return StudySummary.model_validate_json(response.output_text).model_dump()
+    except ValueError as exc:
+        logger.exception(
+            "OpenAI summary response validation failed: %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+        raise RuntimeError("OpenAI summary generation failed.") from exc

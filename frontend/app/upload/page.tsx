@@ -13,10 +13,26 @@ type UploadResult = {
 
 type StudySummary = {
   overview: string;
-  main_topics: string[];
-  important_concepts: string[];
-  formulas_or_definitions: string[];
+  key_topics: KeyTopic[];
+  must_know: string[];
+  common_mistakes: string[];
   suggested_review_order: string[];
+};
+
+type KeyTopic = {
+  name: string;
+  summary: string;
+  details: string;
+};
+
+type QuizOption = {
+  label: "A" | "B" | "C" | "D" | "True" | "False";
+  text: string;
+};
+
+type OptionExplanation = {
+  option_label: "A" | "B" | "C" | "D" | "True" | "False";
+  explanation: string;
 };
 
 type QuizItem = {
@@ -25,30 +41,39 @@ type QuizItem = {
   type: "multiple_choice" | "true_false" | "short_answer";
   topic: string;
   difficulty: "easy" | "medium" | "hard";
-  options: string[] | null;
+  options: QuizOption[] | null;
+  correct_option: "A" | "B" | "C" | "D" | "True" | "False" | null;
   correct_answer: string;
-  explanation: string;
+  short_explanation: string;
+  detailed_explanation: string;
+  why_others_are_wrong: OptionExplanation[];
 };
 
 type SummaryListProps = {
   title: string;
   items: string[];
+  ordered?: boolean;
 };
 
-function SummaryList({ title, items }: SummaryListProps) {
+function SummaryList({ title, items, ordered = false }: SummaryListProps) {
+  const ListTag = ordered ? "ol" : "ul";
+
   return (
     <section>
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </h3>
       {items.length > 0 ? (
-        <ul className="mt-3 space-y-2 text-slate-700">
+        <ListTag className="mt-3 space-y-2 text-slate-700">
           {items.map((item) => (
-            <li key={item} className="rounded-md bg-slate-50 px-3 py-2">
+            <li
+              key={item}
+              className="rounded-md bg-slate-50 px-3 py-2"
+            >
               {item}
             </li>
           ))}
-        </ul>
+        </ListTag>
       ) : (
         <p className="mt-3 text-slate-500">No items returned.</p>
       )}
@@ -66,6 +91,7 @@ export default function UploadPage() {
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [visibleAnswers, setVisibleAnswers] = useState<number[]>([]);
+  const [openTopicDetails, setOpenTopicDetails] = useState<string[]>([]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -73,6 +99,7 @@ export default function UploadPage() {
     setResult(null);
     setError("");
     setVisibleAnswers([]);
+    setOpenTopicDetails([]);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -90,6 +117,7 @@ export default function UploadPage() {
     setError("");
     setResult(null);
     setVisibleAnswers([]);
+    setOpenTopicDetails([]);
 
     try {
       const response = await fetch("http://localhost:8000/upload", {
@@ -115,6 +143,14 @@ export default function UploadPage() {
       current.includes(questionId)
         ? current.filter((id) => id !== questionId)
         : [...current, questionId],
+    );
+  }
+
+  function toggleTopicDetails(topicName: string) {
+    setOpenTopicDetails((current) =>
+      current.includes(topicName)
+        ? current.filter((name) => name !== topicName)
+        : [...current, topicName],
     );
   }
 
@@ -192,44 +228,74 @@ export default function UploadPage() {
         ) : null}
 
         {result ? (
-          <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold text-slate-950">Study summary</h2>
-            <section className="mt-5">
+            <section className="mt-4">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
                 Overview
               </h3>
-              <p className="mt-3 leading-7 text-slate-700">{result.summary.overview}</p>
+              <p className="mt-2 leading-7 text-slate-700">{result.summary.overview}</p>
             </section>
 
-            <div className="mt-8 grid gap-8">
-              <SummaryList title="Main topics" items={result.summary.main_topics} />
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              <SummaryList title="Must know" items={result.summary.must_know} />
               <SummaryList
-                title="Important concepts"
-                items={result.summary.important_concepts}
-              />
-              <SummaryList
-                title="Formulas or definitions"
-                items={result.summary.formulas_or_definitions}
-              />
-              <SummaryList
-                title="Suggested review order"
+                title="Review order"
                 items={result.summary.suggested_review_order}
+                ordered
               />
+            </div>
+
+            <div className="mt-6 grid gap-5">
+              <section>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Key topics
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {result.summary.key_topics.map((topic) => (
+                    <article key={topic.name} className="rounded-md bg-slate-50 px-3 py-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h4 className="font-semibold text-slate-950">{topic.name}</h4>
+                          <p className="mt-1 text-sm leading-6 text-slate-700">
+                            {topic.summary}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleTopicDetails(topic.name)}
+                          className="shrink-0 self-start rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                        >
+                          {openTopicDetails.includes(topic.name)
+                            ? "Hide details"
+                            : "Show details"}
+                        </button>
+                      </div>
+                      {openTopicDetails.includes(topic.name) ? (
+                        <p className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-slate-600">
+                          {topic.details}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <SummaryList title="Common mistakes" items={result.summary.common_mistakes} />
             </div>
           </div>
         ) : null}
 
         {result ? (
-          <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold text-slate-950">Practice quiz</h2>
-            <div className="mt-6 space-y-5">
+            <div className="mt-5 space-y-4">
               {result.quiz.map((item, index) => {
                 const isAnswerVisible = visibleAnswers.includes(item.id);
 
                 return (
                   <article
                     key={item.id}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-5"
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-4"
                   >
                     <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
                       <span className="rounded-full bg-white px-3 py-1 text-slate-600">
@@ -248,10 +314,16 @@ export default function UploadPage() {
                     </h3>
 
                     {item.options ? (
-                      <ul className="mt-4 space-y-2 text-slate-700">
+                      <ul className="mt-4 grid gap-2 text-slate-700 sm:grid-cols-2">
                         {item.options.map((option) => (
-                          <li key={option} className="rounded-md bg-white px-3 py-2">
-                            {option}
+                          <li
+                            key={option.label}
+                            className="flex gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-teal-50 text-sm font-bold text-teal-800">
+                              {option.label}
+                            </span>{" "}
+                            <span className="pt-1 text-sm leading-5">{option.text}</span>
                           </li>
                         ))}
                       </ul>
@@ -269,16 +341,45 @@ export default function UploadPage() {
                       <div className="mt-4 rounded-md bg-white p-4 text-sm leading-6 text-slate-700">
                         <p>
                           <span className="font-semibold text-slate-950">
-                            Correct answer:
+                            Correct option:
+                          </span>{" "}
+                          {item.correct_option ?? "Short answer"}
+                        </p>
+                        <p className="mt-2">
+                          <span className="font-semibold text-slate-950">
+                            Full correct answer:
                           </span>{" "}
                           {item.correct_answer}
                         </p>
                         <p className="mt-2">
                           <span className="font-semibold text-slate-950">
-                            Explanation:
+                            Short explanation:
                           </span>{" "}
-                          {item.explanation}
+                          {item.short_explanation}
                         </p>
+                        <details className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                          <summary className="cursor-pointer font-semibold text-slate-950">
+                            Detailed explanation
+                          </summary>
+                          <p className="mt-2 text-slate-700">{item.detailed_explanation}</p>
+                        </details>
+                        {item.why_others_are_wrong.length > 0 ? (
+                          <details className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                            <summary className="cursor-pointer font-semibold text-slate-950">
+                              Why other options are wrong:
+                            </summary>
+                            <ul className="mt-2 space-y-2">
+                              {item.why_others_are_wrong.map((wrongOption) => (
+                                <li key={wrongOption.option_label}>
+                                  <span className="font-semibold text-slate-950">
+                                    {wrongOption.option_label}:
+                                  </span>{" "}
+                                  {wrongOption.explanation}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
                       </div>
                     ) : null}
                   </article>

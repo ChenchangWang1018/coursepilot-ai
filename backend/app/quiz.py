@@ -11,6 +11,20 @@ OPENAI_MODEL = "gpt-5.5"
 logger = logging.getLogger(__name__)
 
 
+class QuizOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: Literal["A", "B", "C", "D", "True", "False"]
+    text: str
+
+
+class OptionExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    option_label: Literal["A", "B", "C", "D", "True", "False"]
+    explanation: str
+
+
 class QuizItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -19,20 +33,38 @@ class QuizItem(BaseModel):
     type: Literal["multiple_choice", "true_false", "short_answer"]
     topic: str
     difficulty: Literal["easy", "medium", "hard"]
-    options: list[str] | None
+    options: list[QuizOption] | None
+    correct_option: Literal["A", "B", "C", "D", "True", "False"] | None
     correct_answer: str
-    explanation: str
+    short_explanation: str
+    detailed_explanation: str
+    why_others_are_wrong: list[OptionExplanation]
 
     @model_validator(mode="after")
     def validate_options(self) -> "QuizItem":
-        if self.type == "multiple_choice" and len(self.options or []) != 4:
-            raise ValueError("Multiple-choice questions must have exactly 4 options.")
+        labels = [option.label for option in self.options or []]
 
-        if self.type == "true_false" and self.options != ["True", "False"]:
-            raise ValueError('True/false questions must use options ["True", "False"].')
+        if self.type == "multiple_choice":
+            if labels != ["A", "B", "C", "D"]:
+                raise ValueError("Multiple-choice questions must use A, B, C, D labels.")
+            if self.correct_option not in {"A", "B", "C", "D"}:
+                raise ValueError("Multiple-choice correct_option must be A, B, C, or D.")
+            wrong_labels = {label for label in labels if label != self.correct_option}
+            explained_labels = {
+                item.option_label for item in self.why_others_are_wrong
+            }
+            if explained_labels != wrong_labels:
+                raise ValueError("Multiple-choice questions must explain every wrong option.")
 
-        if self.type == "short_answer" and self.options is not None:
-            raise ValueError("Short-answer questions must use null for options.")
+        if self.type == "true_false":
+            if labels != ["True", "False"]:
+                raise ValueError('True/false questions must use labels ["True", "False"].')
+            if self.correct_option not in {"True", "False"}:
+                raise ValueError('True/false correct_option must be "True" or "False".')
+
+        if self.type == "short_answer":
+            if self.options is not None or self.correct_option is not None:
+                raise ValueError("Short-answer questions must use null options and correct_option.")
 
         return self
 
@@ -42,8 +74,22 @@ class QuizResponse(BaseModel):
 
     questions: list[QuizItem] = Field(min_length=5, max_length=5)
 
+    @model_validator(mode="after")
+    def validate_unique_questions(self) -> "QuizResponse":
+        ids = [question.id for question in self.questions]
+        if sorted(ids) != [1, 2, 3, 4, 5]:
+            raise ValueError("Quiz question ids must be exactly 1 through 5.")
 
-def generate_quiz(text: str) -> list[dict[str, str | int | list[str] | None]]:
+        normalized_questions = [
+            " ".join(question.question.lower().split()) for question in self.questions
+        ]
+        if len(set(normalized_questions)) != len(normalized_questions):
+            raise ValueError("Quiz questions must not be duplicates.")
+
+        return self
+
+
+def generate_quiz(text: str) -> list[dict]:
     if not text.strip():
         raise ValueError("No extractable text was found in this PDF.")
 
@@ -63,17 +109,25 @@ def generate_quiz(text: str) -> list[dict[str, str | int | list[str] | None]]:
                     "content": (
                         "You create practice quizzes for students. Use only the uploaded "
                         "course material. Return exactly 5 non-duplicate questions in the "
-                        "requested structured JSON."
+                        "requested structured JSON. Avoid superficial questions that only "
+                        "ask what the PDF says or what an exam requested."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
                         "Create exactly 5 practice quiz questions from this course text. "
-                        "Mix question types when appropriate. Multiple-choice questions "
-                        "must have exactly 4 options, true/false questions must use "
-                        '["True", "False"], and short-answer questions must use null '
-                        "for options. Every answer must be supported by the text.\n\n"
+                        "At least 3 questions must test reasoning, application, proof "
+                        "strategy, or conceptual understanding. Avoid duplicate questions. "
+                        "Every question must be answerable from the uploaded material. "
+                        "Multiple-choice questions must have exactly 4 plausible options "
+                        'labeled A, B, C, and D using objects like {"label": "A", '
+                        '"text": "..."}. correct_option must be A, B, C, or D, and '
+                        "why_others_are_wrong must explain every incorrect option. "
+                        'True/false questions must use options labeled "True" and "False" '
+                        "and explain why the statement is true or false. Short-answer "
+                        "questions must set options and correct_option to null, include a "
+                        "concise model answer, and provide a step-by-step explanation.\n\n"
                         f"{quiz_input}"
                     ),
                 },

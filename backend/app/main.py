@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,7 +26,7 @@ def health() -> dict[str, str]:
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
-) -> dict[str, str | int | dict[str, str | list[str]] | list[dict[str, str | int | list[str] | None]]]:
+) -> dict[str, Any]:
     filename = file.filename or "uploaded.pdf"
 
     if file.content_type != "application/pdf" and not filename.lower().endswith(".pdf"):
