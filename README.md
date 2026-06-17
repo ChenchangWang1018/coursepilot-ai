@@ -81,13 +81,6 @@ Initial development focus:
 5. Add quiz generation
 6. Display results in the frontend
 
-## Environment Variables
-
-The backend will require the following environment variable once AI features are added:
-
-OPENAI_API_KEY=your_api_key_here
-
-API keys should never be committed to GitHub.
 
 ## Local Development
 
