@@ -35,14 +35,16 @@ type OptionExplanation = {
   explanation: string;
 };
 
+type OptionLabel = "A" | "B" | "C" | "D" | "True" | "False";
+
 type QuizItem = {
   id: number;
   question: string;
-  type: "multiple_choice" | "true_false" | "short_answer";
+  type: "multiple_choice" | "true_false";
   topic: string;
   difficulty: "easy" | "medium" | "hard";
-  options: QuizOption[] | null;
-  correct_option: "A" | "B" | "C" | "D" | "True" | "False" | null;
+  options: QuizOption[];
+  correct_option: OptionLabel;
   correct_answer: string;
   short_explanation: string;
   detailed_explanation: string;
@@ -90,7 +92,8 @@ export default function UploadPage() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [visibleAnswers, setVisibleAnswers] = useState<number[]>([]);
+  const [selectedOptions, setSelectedOptions] = useState<Record<number, OptionLabel>>({});
+  const [submittedAnswers, setSubmittedAnswers] = useState<Record<number, OptionLabel>>({});
   const [openTopicDetails, setOpenTopicDetails] = useState<string[]>([]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -98,7 +101,7 @@ export default function UploadPage() {
     setSelectedFile(file);
     setResult(null);
     setError("");
-    setVisibleAnswers([]);
+    resetQuiz();
     setOpenTopicDetails([]);
   }
 
@@ -116,7 +119,7 @@ export default function UploadPage() {
     setIsUploading(true);
     setError("");
     setResult(null);
-    setVisibleAnswers([]);
+    resetQuiz();
     setOpenTopicDetails([]);
 
     try {
@@ -138,14 +141,6 @@ export default function UploadPage() {
     }
   }
 
-  function toggleAnswer(questionId: number) {
-    setVisibleAnswers((current) =>
-      current.includes(questionId)
-        ? current.filter((id) => id !== questionId)
-        : [...current, questionId],
-    );
-  }
-
   function toggleTopicDetails(topicName: string) {
     setOpenTopicDetails((current) =>
       current.includes(topicName)
@@ -153,6 +148,38 @@ export default function UploadPage() {
         : [...current, topicName],
     );
   }
+
+  function selectOption(questionId: number, optionLabel: OptionLabel) {
+    if (submittedAnswers[questionId]) {
+      return;
+    }
+
+    setSelectedOptions((current) => ({
+      ...current,
+      [questionId]: optionLabel,
+    }));
+  }
+
+  function submitAnswer(questionId: number) {
+    const selectedOption = selectedOptions[questionId];
+    if (!selectedOption || submittedAnswers[questionId]) {
+      return;
+    }
+
+    setSubmittedAnswers((current) => ({
+      ...current,
+      [questionId]: selectedOption,
+    }));
+  }
+
+  function resetQuiz() {
+    setSelectedOptions({});
+    setSubmittedAnswers({});
+  }
+
+  const score = result
+    ? result.quiz.filter((item) => submittedAnswers[item.id] === item.correct_option).length
+    : 0;
 
   return (
     <main className="min-h-screen px-6 py-12">
@@ -287,10 +314,27 @@ export default function UploadPage() {
 
         {result ? (
           <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-950">Practice quiz</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-xl font-bold text-slate-950">Practice quiz</h2>
+              <div className="flex items-center gap-3">
+                <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
+                  Score: {score} / {result.quiz.length}
+                </p>
+                <button
+                  type="button"
+                  onClick={resetQuiz}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                >
+                  Reset quiz
+                </button>
+              </div>
+            </div>
             <div className="mt-5 space-y-4">
               {result.quiz.map((item, index) => {
-                const isAnswerVisible = visibleAnswers.includes(item.id);
+                const selectedOption = selectedOptions[item.id];
+                const submittedOption = submittedAnswers[item.id];
+                const isSubmitted = Boolean(submittedOption);
+                const isCorrect = submittedOption === item.correct_option;
 
                 return (
                   <article
@@ -313,37 +357,75 @@ export default function UploadPage() {
                       {index + 1}. {item.question}
                     </h3>
 
-                    {item.options ? (
-                      <ul className="mt-4 grid gap-2 text-slate-700 sm:grid-cols-2">
-                        {item.options.map((option) => (
-                          <li
-                            key={option.label}
-                            className="flex gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
-                          >
-                            <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-teal-50 text-sm font-bold text-teal-800">
-                              {option.label}
-                            </span>{" "}
-                            <span className="pt-1 text-sm leading-5">{option.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+                    <fieldset className="mt-4 grid gap-2 text-slate-700 sm:grid-cols-2">
+                      <legend className="sr-only">Choose one answer</legend>
+                      {item.options.map((option) => (
+                        <label
+                          key={option.label}
+                          className={[
+                            "flex cursor-pointer gap-3 rounded-md border px-3 py-2 transition",
+                            selectedOption === option.label
+                              ? "border-teal-600 bg-teal-50"
+                              : "border-slate-200 bg-white hover:bg-slate-50",
+                            isSubmitted ? "cursor-not-allowed hover:bg-white" : "",
+                            isSubmitted && option.label === item.correct_option
+                              ? "border-green-500 bg-green-50"
+                              : "",
+                            isSubmitted &&
+                            option.label === submittedOption &&
+                            option.label !== item.correct_option
+                              ? "border-red-400 bg-red-50"
+                              : "",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="radio"
+                            name={`question-${item.id}`}
+                            value={option.label}
+                            checked={selectedOption === option.label}
+                            disabled={isSubmitted}
+                            onChange={() => selectOption(item.id, option.label)}
+                            className="sr-only"
+                          />
+                          <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-teal-50 text-sm font-bold text-teal-800">
+                            {option.label}
+                          </span>{" "}
+                          <span className="pt-1 text-sm leading-5">{option.text}</span>
+                        </label>
+                      ))}
+                    </fieldset>
 
                     <button
                       type="button"
-                      onClick={() => toggleAnswer(item.id)}
-                      className="mt-5 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                      onClick={() => submitAnswer(item.id)}
+                      disabled={!selectedOption || isSubmitted}
+                      className="mt-5 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                     >
-                      {isAnswerVisible ? "Hide answer" : "Show answer"}
+                      {isSubmitted ? "Submitted" : "Submit answer"}
                     </button>
 
-                    {isAnswerVisible ? (
+                    {isSubmitted ? (
                       <div className="mt-4 rounded-md bg-white p-4 text-sm leading-6 text-slate-700">
+                        <p
+                          className={
+                            isCorrect
+                              ? "font-semibold text-green-700"
+                              : "font-semibold text-red-700"
+                          }
+                        >
+                          {isCorrect ? "Correct" : "Incorrect"}
+                        </p>
+                        <p className="mt-2">
+                          <span className="font-semibold text-slate-950">
+                            Selected option:
+                          </span>{" "}
+                          {submittedOption}
+                        </p>
                         <p>
                           <span className="font-semibold text-slate-950">
                             Correct option:
                           </span>{" "}
-                          {item.correct_option ?? "Short answer"}
+                          {item.correct_option}
                         </p>
                         <p className="mt-2">
                           <span className="font-semibold text-slate-950">

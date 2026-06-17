@@ -30,11 +30,11 @@ class QuizItem(BaseModel):
 
     id: int
     question: str
-    type: Literal["multiple_choice", "true_false", "short_answer"]
+    type: Literal["multiple_choice", "true_false"]
     topic: str
     difficulty: Literal["easy", "medium", "hard"]
-    options: list[QuizOption] | None
-    correct_option: Literal["A", "B", "C", "D", "True", "False"] | None
+    options: list[QuizOption]
+    correct_option: Literal["A", "B", "C", "D", "True", "False"]
     correct_answer: str
     short_explanation: str
     detailed_explanation: str
@@ -61,10 +61,12 @@ class QuizItem(BaseModel):
                 raise ValueError('True/false questions must use labels ["True", "False"].')
             if self.correct_option not in {"True", "False"}:
                 raise ValueError('True/false correct_option must be "True" or "False".')
-
-        if self.type == "short_answer":
-            if self.options is not None or self.correct_option is not None:
-                raise ValueError("Short-answer questions must use null options and correct_option.")
+            wrong_labels = {label for label in labels if label != self.correct_option}
+            explained_labels = {
+                item.option_label for item in self.why_others_are_wrong
+            }
+            if explained_labels != wrong_labels:
+                raise ValueError("True/false questions must explain the incorrect option.")
 
         return self
 
@@ -117,6 +119,8 @@ def generate_quiz(text: str) -> list[dict]:
                     "role": "user",
                     "content": (
                         "Create exactly 5 practice quiz questions from this course text. "
+                        "Use only multiple_choice and true_false question types. Do not "
+                        "create short_answer questions. "
                         "At least 3 questions must test reasoning, application, proof "
                         "strategy, or conceptual understanding. Avoid duplicate questions. "
                         "Every question must be answerable from the uploaded material. "
@@ -125,9 +129,7 @@ def generate_quiz(text: str) -> list[dict]:
                         '"text": "..."}. correct_option must be A, B, C, or D, and '
                         "why_others_are_wrong must explain every incorrect option. "
                         'True/false questions must use options labeled "True" and "False" '
-                        "and explain why the statement is true or false. Short-answer "
-                        "questions must set options and correct_option to null, include a "
-                        "concise model answer, and provide a step-by-step explanation.\n\n"
+                        "and why_others_are_wrong must explain the incorrect option.\n\n"
                         f"{quiz_input}"
                     ),
                 },
