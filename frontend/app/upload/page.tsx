@@ -10,6 +10,7 @@ import {
   StudyGuide,
   UploadForm,
 } from "./components";
+import { analyzeQuizPerformance } from "./quizAnalysis";
 import { OptionLabel, ProcessingStage, ResultTab, UploadResult } from "./types";
 
 const PROCESSING_STAGES: ProcessingStage[] = [
@@ -192,9 +193,13 @@ export default function UploadPage() {
   }
 
   const activeResult = result ?? pendingResult;
-  const score = result
-    ? result.quiz.filter((item) => submittedAnswers[item.id] === item.correct_option).length
-    : 0;
+  const quizAnalysis = result
+    ? analyzeQuizPerformance(result.quiz, {
+        selectedAnswers: selectedOptions,
+        submittedAnswers,
+      })
+    : null;
+  const score = quizAnalysis?.totalCorrect ?? 0;
   const showProcessing =
     selectedFile && ["processing", "success", "error"].includes(processingStatus);
 
@@ -241,6 +246,10 @@ export default function UploadPage() {
                 quiz={result.quiz}
                 selectedOptions={selectedOptions}
                 submittedAnswers={submittedAnswers}
+                analysis={quizAnalysis ?? analyzeQuizPerformance(result.quiz, {
+                  selectedAnswers: selectedOptions,
+                  submittedAnswers,
+                })}
                 score={score}
                 onSelectOption={selectOption}
                 onSubmitAnswer={submitAnswer}

@@ -7,6 +7,7 @@ import {
   StudySummary,
   UploadResult,
 } from "./types";
+import { PerformanceBucket, QuizAnalysis } from "./quizAnalysis";
 
 type UploadFormProps = {
   selectedFile: File | null;
@@ -305,36 +306,57 @@ type PracticeQuizProps = {
   quiz: QuizItem[];
   selectedOptions: Record<number, OptionLabel>;
   submittedAnswers: Record<number, OptionLabel>;
+  analysis: QuizAnalysis;
   score: number;
   onSelectOption: (questionId: number, optionLabel: OptionLabel) => void;
   onSubmitAnswer: (questionId: number) => void;
   onResetQuiz: () => void;
 };
 
+function displayTopic(topic: string | undefined) {
+  const normalizedTopic = topic?.trim();
+  return normalizedTopic || "Untitled topic";
+}
+
+function displayDifficulty(difficulty: string | undefined) {
+  return difficulty || "unknown";
+}
+
 export function PracticeQuiz({
   quiz,
   selectedOptions,
   submittedAnswers,
+  analysis,
   score,
   onSelectOption,
   onSubmitAnswer,
   onResetQuiz,
 }: PracticeQuizProps) {
+  const isReportUnlocked = analysis.totalSubmitted === quiz.length;
+
   return (
     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-bold text-slate-950">Practice quiz</h2>
-        <div className="flex items-center gap-3">
-          <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
-            Score: {score} / {quiz.length}
-          </p>
-          <button
-            type="button"
-            onClick={onResetQuiz}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-          >
-            Reset quiz
-          </button>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex items-center gap-3">
+            <p className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
+              Score: {score} / {quiz.length}
+            </p>
+            <button
+              type="button"
+              onClick={onResetQuiz}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+            >
+              Reset quiz
+            </button>
+          </div>
+          {!isReportUnlocked ? (
+            <p className="text-sm text-slate-600">
+              Complete all {quiz.length} questions to unlock your quiz report.{" "}
+              {analysis.totalSubmitted} / {quiz.length} questions completed.
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="mt-5 space-y-4">
@@ -354,10 +376,10 @@ export function PracticeQuiz({
                   {formatLabel(item.type)}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-600">
-                  {item.topic}
+                  {displayTopic(item.topic)}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-600">
-                  {item.difficulty}
+                  {displayDifficulty(item.difficulty)}
                 </span>
               </div>
 
@@ -470,6 +492,221 @@ export function PracticeQuiz({
           );
         })}
       </div>
+      <QuizReview analysis={analysis} totalQuestions={quiz.length} />
     </div>
+  );
+}
+
+type MiniStatProps = {
+  label: string;
+  value: string;
+};
+
+function MiniStat({ label, value }: MiniStatProps) {
+  return (
+    <div className="rounded-md bg-slate-50 px-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+type PerformanceListProps = {
+  buckets: PerformanceBucket[];
+  emptyMessage: string;
+};
+
+function PerformanceList({ buckets, emptyMessage }: PerformanceListProps) {
+  if (buckets.length === 0) {
+    return <p className="text-sm text-slate-500">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {buckets.map((bucket) => (
+        <div
+          key={bucket.name}
+          className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm"
+        >
+          <span className="font-semibold capitalize text-slate-800">{bucket.name}</span>
+          <span className="text-slate-600">
+            {bucket.correct} / {bucket.submitted} - {bucket.accuracy}%
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type QuizReviewProps = {
+  analysis: QuizAnalysis;
+  totalQuestions: number;
+};
+
+function getReportStatus(accuracy: number) {
+  if (accuracy >= 80) {
+    return {
+      label: "Strong",
+      subtitle: "Strong performance. You are ready for harder practice.",
+      className: "bg-green-50 text-green-700 ring-green-200",
+    };
+  }
+
+  if (accuracy >= 60) {
+    return {
+      label: "Good",
+      subtitle: "Good start. Review a few weak spots.",
+      className: "bg-amber-50 text-amber-700 ring-amber-200",
+    };
+  }
+
+  return {
+    label: "Needs Review",
+    subtitle: "Needs review. Focus on the topics below.",
+    className: "bg-red-50 text-red-700 ring-red-200",
+  };
+}
+
+function QuizReview({ analysis, totalQuestions }: QuizReviewProps) {
+  if (analysis.totalSubmitted < totalQuestions) {
+    return null;
+  }
+
+  const reportStatus = getReportStatus(analysis.overallAccuracy);
+  const weakTopics = analysis.weakTopics.slice(0, 3);
+  const recommendations = analysis.recommendedNextSteps.slice(0, 4);
+
+  return (
+    <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-950">Quiz Report</h2>
+          <p className="mt-1 text-sm text-slate-600">{reportStatus.subtitle}</p>
+        </div>
+        <span
+          className={[
+            "inline-flex self-start rounded-full px-3 py-1 text-sm font-semibold ring-1 ring-inset",
+            reportStatus.className,
+          ].join(" ")}
+        >
+          {reportStatus.label}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat
+          label="Score"
+          value={`${analysis.totalCorrect} / ${totalQuestions}`}
+        />
+        <MiniStat label="Accuracy" value={`${analysis.overallAccuracy}%`} />
+        <MiniStat label="Result" value={reportStatus.label} />
+      </div>
+
+      <section className="mt-5">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Main weak areas
+        </h3>
+        {weakTopics.length > 0 ? (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {weakTopics.map((topic) => (
+              <div
+                key={topic.name}
+                className="rounded-md border border-red-100 bg-red-50 px-3 py-3 text-sm"
+              >
+                <p className="font-semibold text-red-800">{topic.name}</p>
+                <p className="mt-1 text-red-700">
+                  {topic.correct} / {topic.submitted} correct
+                </p>
+                <p className="text-red-700">{topic.accuracy}% accuracy</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+            No major weak topics identified.
+          </p>
+        )}
+      </section>
+
+      <section className="mt-5 rounded-md border border-teal-100 bg-teal-50 p-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-teal-800">
+          Recommended next steps
+        </h3>
+        <ul className="mt-3 space-y-2 text-sm text-teal-900">
+          {recommendations.map((step) => (
+            <li key={step} className="rounded-md bg-white/70 px-3 py-2">
+              {step}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-5">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Missed questions
+        </h3>
+        {analysis.missedQuestions.length > 0 ? (
+          <div className="space-y-2">
+            {analysis.missedQuestions.map((question) => (
+              <article
+                key={question.id}
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
+              >
+                <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <span>Question {question.id}</span>
+                  <span>{question.topic}</span>
+                  <span>{question.difficulty}</span>
+                </div>
+                <p className="mt-2 font-semibold text-slate-950">
+                  {question.question.length > 120
+                    ? `${question.question.slice(0, 120)}...`
+                    : question.question}
+                </p>
+                <p className="mt-2 text-slate-700">
+                  <span className="font-semibold">Correct option:</span>{" "}
+                  {question.correctOption}
+                </p>
+                <p className="text-slate-700">
+                  <span className="font-semibold">Correct answer:</span>{" "}
+                  {question.correctAnswer}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+            No missed submitted questions yet.
+          </p>
+        )}
+      </section>
+
+      <div className="mt-5 grid gap-3">
+        <details className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+            Topic breakdown
+          </summary>
+          <div className="mt-3">
+            <PerformanceList
+              buckets={analysis.performanceByTopic}
+              emptyMessage="No topic performance available."
+            />
+          </div>
+        </details>
+
+        <details className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+            Difficulty breakdown
+          </summary>
+          <div className="mt-3">
+            <PerformanceList
+              buckets={analysis.performanceByDifficulty}
+              emptyMessage="No difficulty performance available."
+            />
+          </div>
+        </details>
+      </div>
+    </section>
   );
 }
