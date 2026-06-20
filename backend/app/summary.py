@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MAX_SUMMARY_INPUT_CHARS = 12000
 OPENAI_MODEL = "gpt-5.5"
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 class KeyTopic(BaseModel):
@@ -89,17 +89,20 @@ def generate_study_summary(text: str) -> dict[str, str | list[str]]:
                 }
             },
         )
-        return StudySummary.model_validate_json(response.output_text).model_dump()
+        logger.info("RESPONSE_VALIDATION_STARTED response=study_summary")
+        summary = StudySummary.model_validate_json(response.output_text)
+        logger.info("RESPONSE_VALIDATION_SUCCEEDED response=study_summary")
+        return summary.model_dump()
     except OpenAIError as exc:
         logger.exception(
-            "OpenAI summary generation failed: %s: %s",
+            "SUMMARY_GENERATION_FAILED: %s: %s",
             type(exc).__name__,
             exc,
         )
         raise RuntimeError("OpenAI summary generation failed.") from exc
     except ValueError as exc:
         logger.exception(
-            "OpenAI summary response validation failed: %s: %s",
+            "RESPONSE_VALIDATION_FAILED response=study_summary: %s: %s",
             type(exc).__name__,
             exc,
         )

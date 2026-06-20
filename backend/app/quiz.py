@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 MAX_QUIZ_INPUT_CHARS = 12000
 OPENAI_MODEL = "gpt-5.5"
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 class QuizOption(BaseModel):
@@ -143,17 +143,19 @@ def generate_quiz(text: str) -> list[dict]:
                 }
             },
         )
+        logger.info("RESPONSE_VALIDATION_STARTED response=practice_quiz")
         quiz = QuizResponse.model_validate_json(response.output_text)
+        logger.info("RESPONSE_VALIDATION_SUCCEEDED response=practice_quiz")
     except OpenAIError as exc:
         logger.exception(
-            "OpenAI quiz generation failed: %s: %s",
+            "QUIZ_GENERATION_FAILED: %s: %s",
             type(exc).__name__,
             exc,
         )
         raise RuntimeError("OpenAI quiz generation failed.") from exc
     except ValueError as exc:
         logger.exception(
-            "OpenAI quiz response validation failed: %s: %s",
+            "RESPONSE_VALIDATION_FAILED response=practice_quiz: %s: %s",
             type(exc).__name__,
             exc,
         )
