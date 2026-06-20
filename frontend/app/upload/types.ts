@@ -1,4 +1,5 @@
 export type UploadResult = {
+  document_id?: string;
   filename: string;
   num_pages: number;
   text_preview: string;
@@ -52,4 +53,11 @@ export type ProcessingStage =
   | "Generating study guide"
   | "Creating practice quiz";
 
-export type ResultTab = "study" | "quiz";
+export type ResultTab = "study" | "quiz" | "tutor";
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  suggested_followups?: string[];
+};

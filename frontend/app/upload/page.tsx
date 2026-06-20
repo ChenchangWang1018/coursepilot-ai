@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
+  AskTutor,
   PracticeQuiz,
   ProcessingProgress,
   ResultHeader,
@@ -11,7 +12,13 @@ import {
   UploadForm,
 } from "./components";
 import { analyzeQuizPerformance } from "./quizAnalysis";
-import { OptionLabel, ProcessingStage, ResultTab, UploadResult } from "./types";
+import {
+  ChatMessage,
+  OptionLabel,
+  ProcessingStage,
+  ResultTab,
+  UploadResult,
+} from "./types";
 
 const PROCESSING_STAGES: ProcessingStage[] = [
   "Uploading PDF",
@@ -48,6 +55,10 @@ export default function UploadPage() {
   const [activeTab, setActiveTab] = useState<ResultTab>("study");
   const [selectedOptions, setSelectedOptions] = useState<Record<number, OptionLabel>>({});
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<number, OptionLabel>>({});
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [isTutorLoading, setIsTutorLoading] = useState(false);
   const progressTimerRef = useRef<number | null>(null);
   const successTimerRef = useRef<number | null>(null);
 
@@ -74,6 +85,13 @@ export default function UploadPage() {
     setSubmittedAnswers({});
   }
 
+  function resetTutor() {
+    setChatMessages([]);
+    setChatInput("");
+    setChatError("");
+    setIsTutorLoading(false);
+  }
+
   function resetForNewUpload() {
     clearProgressTimers();
     setSelectedFile(null);
@@ -84,6 +102,7 @@ export default function UploadPage() {
     setProgress(10);
     setActiveTab("study");
     resetQuiz();
+    resetTutor();
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -96,6 +115,7 @@ export default function UploadPage() {
     setProgress(10);
     setActiveTab("study");
     resetQuiz();
+    resetTutor();
   }
 
   function startSimulatedProgress() {
@@ -130,6 +150,7 @@ export default function UploadPage() {
     setPendingResult(null);
     setActiveTab("study");
     resetQuiz();
+    resetTutor();
     startSimulatedProgress();
 
     try {
@@ -190,6 +211,70 @@ export default function UploadPage() {
       ...current,
       [questionId]: selectedOption,
     }));
+  }
+
+  async function askTutor(questionOverride?: string) {
+    const question = (questionOverride ?? chatInput).trim();
+
+    if (!question || isTutorLoading) {
+      return;
+    }
+
+    if (!result?.document_id) {
+      setChatError("Ask Tutor is unavailable for this upload. Please upload the PDF again.");
+      return;
+    }
+
+    setIsTutorLoading(true);
+    setChatError("");
+    setChatInput("");
+    const userMessage: ChatMessage = {
+      id: `${Date.now()}-user`,
+      role: "user",
+      content: question,
+    };
+    setChatMessages((current) => [...current, userMessage]);
+
+    try {
+      const response = await fetch("http://localhost:8000/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: result.document_id,
+          question,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail ?? "Tutor request failed.");
+      }
+
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          content: data.answer,
+          suggested_followups: data.suggested_followups ?? [],
+        },
+      ]);
+    } catch {
+      setChatError("Ask Tutor could not answer that question. Please try again.");
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-assistant-error`,
+          role: "assistant",
+          content: "I couldn't answer that question. Please try again.",
+        },
+      ]);
+    } finally {
+      setIsTutorLoading(false);
+    }
   }
 
   const activeResult = result ?? pendingResult;
@@ -254,6 +339,17 @@ export default function UploadPage() {
                 onSelectOption={selectOption}
                 onSubmitAnswer={submitAnswer}
                 onResetQuiz={resetQuiz}
+              />
+            </div>
+            <div className={activeTab === "tutor" ? "block" : "hidden"}>
+              <AskTutor
+                documentId={result.document_id}
+                messages={chatMessages}
+                inputValue={chatInput}
+                isLoading={isTutorLoading}
+                error={chatError}
+                onInputChange={setChatInput}
+                onAsk={askTutor}
               />
             </div>
           </>

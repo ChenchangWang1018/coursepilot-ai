@@ -1,5 +1,6 @@
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
+  ChatMessage,
   OptionLabel,
   ProcessingStage,
   QuizItem,
@@ -176,11 +177,12 @@ export function ResultTabs({ activeTab, onTabChange }: ResultTabsProps) {
   const tabs: Array<{ id: ResultTab; label: string }> = [
     { id: "study", label: "Study Guide" },
     { id: "quiz", label: "Practice Quiz" },
+    { id: "tutor", label: "Ask Tutor" },
   ];
 
   return (
     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-      <div className="grid grid-cols-2 gap-1">
+      <div className="grid grid-cols-3 gap-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -708,5 +710,182 @@ function QuizReview({ analysis, totalQuestions }: QuizReviewProps) {
         </details>
       </div>
     </section>
+  );
+}
+
+type AskTutorProps = {
+  documentId?: string;
+  messages: ChatMessage[];
+  inputValue: string;
+  isLoading: boolean;
+  error: string;
+  onInputChange: (value: string) => void;
+  onAsk: (question?: string) => void;
+};
+
+const EXAMPLE_QUESTIONS = [
+  "Explain the hardest topic in this document.",
+  "Create a proof template for one topic.",
+  "What should I review first?",
+];
+
+export function AskTutor({
+  documentId,
+  messages,
+  inputValue,
+  isLoading,
+  error,
+  onInputChange,
+  onAsk,
+}: AskTutorProps) {
+  const trimmedInput = inputValue.trim();
+  const canAsk = Boolean(documentId && trimmedInput && !isLoading);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const latestAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, isLoading]);
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    onAsk();
+  }
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 p-5">
+        <h2 className="text-xl font-bold text-slate-950">Ask Tutor</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Ask questions about this uploaded course material.
+        </p>
+      </div>
+
+      {!documentId ? (
+        <div className="m-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          This upload does not have a document ID for tutor questions. Upload the PDF again
+          to enable Ask Tutor.
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="mx-5 mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="max-h-[560px] min-h-[360px] overflow-y-auto bg-slate-50 px-5 py-5">
+        {messages.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-center">
+            <p className="font-semibold text-slate-950">
+              Ask a question about your uploaded PDF to start a tutoring conversation.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {EXAMPLE_QUESTIONS.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  disabled={!documentId || isLoading}
+                  onClick={() => onAsk(question)}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-4">
+          {messages.map((message) => {
+            const isUser = message.role === "user";
+            const showFollowups =
+              !isUser &&
+              latestAssistantMessage?.id === message.id &&
+              Boolean(message.suggested_followups?.length);
+
+            return (
+              <div
+                key={message.id}
+                className={["flex", isUser ? "justify-end" : "justify-start"].join(" ")}
+              >
+                <div
+                  className={[
+                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[72%]",
+                    isUser
+                      ? "rounded-br-md bg-teal-700 text-white"
+                      : "rounded-bl-md border border-slate-200 bg-white text-slate-800",
+                  ].join(" ")}
+                >
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {showFollowups ? (
+                    <div className="mt-3 border-t border-slate-100 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Suggested follow-ups
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {message.suggested_followups?.map((followup) => (
+                          <button
+                            key={followup}
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => onAsk(followup)}
+                            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          >
+                            {followup}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+          {isLoading ? (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm">
+                Tutor is thinking...
+              </div>
+            </div>
+          ) : null}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1">
+            <span className="sr-only">Ask Tutor question</span>
+            <textarea
+              value={inputValue}
+              onChange={(event) => onInputChange(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              rows={2}
+              disabled={!documentId || isLoading}
+              className="block max-h-36 min-h-12 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-800 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:bg-slate-100"
+              placeholder="Ask about a concept, proof, example, or study plan..."
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!canAsk}
+            onClick={() => onAsk()}
+            className="inline-flex items-center justify-center rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {isLoading ? "Sending..." : "Send"}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Press Enter to send. Use Shift+Enter for a new line.
+        </p>
+      </div>
+    </div>
   );
 }
