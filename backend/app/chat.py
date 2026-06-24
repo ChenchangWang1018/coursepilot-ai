@@ -1,13 +1,25 @@
 import logging
-import os
+from typing import Literal
 
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, ConfigDict, Field
 
+from .config import get_openai_api_key, get_openai_model
+
 MAX_CHAT_CONTEXT_CHARS = 14000
-OPENAI_MODEL = "gpt-5.5"
+MAX_CHAT_HISTORY_MESSAGES = 6
 
 logger = logging.getLogger(__name__)
+
+
+class ChatHistoryMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+AnswerMode = Literal["concise", "step_by_step", "exam_answer"]
 
 
 class TutorResponse(BaseModel):
@@ -17,23 +29,75 @@ class TutorResponse(BaseModel):
     suggested_followups: list[str] = Field(min_length=2, max_length=4)
 
 
-def answer_document_question(document_text: str, question: str) -> dict[str, str | list[str]]:
+def _format_chat_history(chat_history: list[ChatHistoryMessage] | None) -> str:
+    if not chat_history:
+        return "No prior conversation."
+
+    recent_messages = [
+        message
+        for message in chat_history[-MAX_CHAT_HISTORY_MESSAGES:]
+        if message.content.strip()
+    ]
+    if not recent_messages:
+        return "No prior conversation."
+
+    return "\n".join(
+        f"{message.role}: {message.content.strip()}" for message in recent_messages
+    )
+
+
+def _normalize_answer_mode(answer_mode: str | None) -> AnswerMode:
+    if answer_mode == "concise":
+        return "concise"
+
+    if answer_mode == "exam_answer":
+        return "exam_answer"
+
+    return "step_by_step"
+
+
+def _get_answer_mode_instruction(answer_mode: AnswerMode) -> str:
+    if answer_mode == "concise":
+        return (
+            "Answer in a short, direct way. Avoid long explanations. Use bullet "
+            "points only when helpful. Target 3 to 6 sentences unless the question "
+            "requires more."
+        )
+
+    if answer_mode == "exam_answer":
+        return (
+            "Provide a compact answer suitable for writing on an exam. Include proof "
+            "templates or key steps when relevant. Avoid casual explanation. "
+            "Prioritize correctness and concision."
+        )
+
+    return (
+        "Explain the reasoning clearly. Break down concepts in order. Teach like a "
+        "patient tutor while avoiding unnecessary length."
+    )
+
+
+def answer_document_question(
+    document_text: str,
+    question: str,
+    chat_history: list[ChatHistoryMessage] | None = None,
+    answer_mode: str | None = None,
+) -> dict[str, str | list[str]]:
     if not document_text.strip():
         raise ValueError("The stored document has no text to answer from.")
 
     if not question.strip():
         raise ValueError("Question cannot be empty.")
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
-
     context = document_text[:MAX_CHAT_CONTEXT_CHARS]
-    client = OpenAI(api_key=api_key)
+    formatted_chat_history = _format_chat_history(chat_history)
+    normalized_answer_mode = _normalize_answer_mode(answer_mode)
+    answer_mode_instruction = _get_answer_mode_instruction(normalized_answer_mode)
+    client = OpenAI(api_key=get_openai_api_key())
 
     try:
         response = client.responses.create(
-            model=os.getenv("OPENAI_MODEL", OPENAI_MODEL),
+            model=get_openai_model(),
             input=[
                 {
                     "role": "system",
@@ -43,7 +107,11 @@ def answer_document_question(document_text: str, question: str) -> dict[str, str
                         "If the document does not contain enough information, say that "
                         "clearly instead of inventing details. You may use general CS "
                         "knowledge only to explain concepts already present in the "
-                        "document. Return only the requested structured JSON."
+                        "document. Use recent chat history to resolve follow-up "
+                        "references, but do not blindly repeat previous answers. If a "
+                        "follow-up is ambiguous, ask a brief clarifying question. Return "
+                        "only the requested structured JSON. Avoid overly long answers; "
+                        "the student can ask follow-up questions for more detail."
                     ),
                 },
                 {
@@ -51,6 +119,10 @@ def answer_document_question(document_text: str, question: str) -> dict[str, str
                     "content": (
                         "Uploaded document context:\n"
                         f"{context}\n\n"
+                        "Recent conversation:\n"
+                        f"{formatted_chat_history}\n\n"
+                        "Answer style:\n"
+                        f"{answer_mode_instruction}\n\n"
                         "Student question:\n"
                         f"{question.strip()}\n\n"
                         "Answer the question and suggest 2 to 4 useful follow-up "

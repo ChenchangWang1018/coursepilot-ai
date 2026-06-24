@@ -1,12 +1,12 @@
 import logging
-import os
 from typing import Literal
 
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .config import get_openai_api_key, get_openai_model
+
 MAX_QUIZ_INPUT_CHARS = 12000
-OPENAI_MODEL = "gpt-5.5"
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -95,16 +95,12 @@ def generate_quiz(text: str) -> list[dict]:
     if not text.strip():
         raise ValueError("No extractable text was found in this PDF.")
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
-
     quiz_input = text[:MAX_QUIZ_INPUT_CHARS]
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=get_openai_api_key())
 
     try:
         response = client.responses.create(
-            model=os.getenv("OPENAI_MODEL", OPENAI_MODEL),
+            model=get_openai_model(),
             input=[
                 {
                     "role": "system",

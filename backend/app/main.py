@@ -4,13 +4,13 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.chat import answer_document_question
-from app.document_store import get_document, save_document
-from app.pdf import extract_pdf_text
-from app.quiz import generate_quiz
-from app.summary import generate_study_summary
+from .chat import ChatHistoryMessage, answer_document_question
+from .document_store import get_document, save_document
+from .pdf import extract_pdf_text
+from .quiz import generate_quiz
+from .summary import generate_study_summary
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -28,6 +28,8 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     document_id: str
     question: str
+    chat_history: list[ChatHistoryMessage] = Field(default_factory=list)
+    answer_mode: str | None = None
 
 
 @app.get("/health")
@@ -49,11 +51,17 @@ def chat(request: ChatRequest) -> dict[str, str | list[str]]:
 
     try:
         logger.info(
-            "CHAT_ANSWER_STARTED document_id=%s question_chars=%d",
+            "CHAT_ANSWER_STARTED document_id=%s question_chars=%d history_messages=%d",
             document_id,
             len(question),
+            min(len(request.chat_history), 6),
         )
-        response = answer_document_question(document.text, question)
+        response = answer_document_question(
+            document.text,
+            question,
+            request.chat_history[-6:],
+            request.answer_mode,
+        )
         logger.info("CHAT_ANSWER_SUCCEEDED document_id=%s", document_id)
         return response
     except ValueError as exc:
