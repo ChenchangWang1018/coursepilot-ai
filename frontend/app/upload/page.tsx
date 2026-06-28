@@ -13,6 +13,7 @@ import {
 } from "./components";
 import { analyzeQuizPerformance } from "./quizAnalysis";
 import {
+  AnswerMode,
   ChatMessage,
   OptionLabel,
   ProcessingStage,
@@ -59,6 +60,7 @@ export default function UploadPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatError, setChatError] = useState("");
   const [isTutorLoading, setIsTutorLoading] = useState(false);
+  const [answerMode, setAnswerMode] = useState<AnswerMode>("step_by_step");
   const progressTimerRef = useRef<number | null>(null);
   const successTimerRef = useRef<number | null>(null);
 
@@ -90,6 +92,7 @@ export default function UploadPage() {
     setChatInput("");
     setChatError("");
     setIsTutorLoading(false);
+    setAnswerMode("step_by_step");
   }
 
   function resetForNewUpload() {
@@ -236,6 +239,14 @@ export default function UploadPage() {
     setChatMessages((current) => [...current, userMessage]);
 
     try {
+      const chatHistory = chatMessages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }))
+        .slice(-6);
+
       const response = await fetch("http://localhost:8000/chat", {
         method: "POST",
         headers: {
@@ -244,6 +255,8 @@ export default function UploadPage() {
         body: JSON.stringify({
           document_id: result.document_id,
           question,
+          chat_history: chatHistory,
+          answer_mode: answerMode,
         }),
       });
 
@@ -275,6 +288,11 @@ export default function UploadPage() {
     } finally {
       setIsTutorLoading(false);
     }
+  }
+
+  function askTutorFromQuizReport(question: string) {
+    setActiveTab("tutor");
+    void askTutor(question);
   }
 
   const activeResult = result ?? pendingResult;
@@ -336,9 +354,11 @@ export default function UploadPage() {
                   submittedAnswers,
                 })}
                 score={score}
+                isTutorBusy={isTutorLoading}
                 onSelectOption={selectOption}
                 onSubmitAnswer={submitAnswer}
                 onResetQuiz={resetQuiz}
+                onAskTutor={askTutorFromQuizReport}
               />
             </div>
             <div className={activeTab === "tutor" ? "block" : "hidden"}>
@@ -346,9 +366,11 @@ export default function UploadPage() {
                 documentId={result.document_id}
                 messages={chatMessages}
                 inputValue={chatInput}
+                answerMode={answerMode}
                 isLoading={isTutorLoading}
                 error={chatError}
                 onInputChange={setChatInput}
+                onAnswerModeChange={setAnswerMode}
                 onAsk={askTutor}
               />
             </div>

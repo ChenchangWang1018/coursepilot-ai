@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
+  AnswerMode,
   ChatMessage,
   OptionLabel,
   ProcessingStage,
@@ -8,7 +9,8 @@ import {
   StudySummary,
   UploadResult,
 } from "./types";
-import { PerformanceBucket, QuizAnalysis } from "./quizAnalysis";
+import { MarkdownContent } from "./MarkdownContent";
+import { MissedQuestion, PerformanceBucket, QuizAnalysis } from "./quizAnalysis";
 
 type UploadFormProps = {
   selectedFile: File | null;
@@ -310,9 +312,11 @@ type PracticeQuizProps = {
   submittedAnswers: Record<number, OptionLabel>;
   analysis: QuizAnalysis;
   score: number;
+  isTutorBusy: boolean;
   onSelectOption: (questionId: number, optionLabel: OptionLabel) => void;
   onSubmitAnswer: (questionId: number) => void;
   onResetQuiz: () => void;
+  onAskTutor: (question: string) => void;
 };
 
 function displayTopic(topic: string | undefined) {
@@ -330,9 +334,11 @@ export function PracticeQuiz({
   submittedAnswers,
   analysis,
   score,
+  isTutorBusy,
   onSelectOption,
   onSubmitAnswer,
   onResetQuiz,
+  onAskTutor,
 }: PracticeQuizProps) {
   const isReportUnlocked = analysis.totalSubmitted === quiz.length;
 
@@ -462,14 +468,16 @@ export function PracticeQuiz({
                   <p className="mt-2">
                     <span className="font-semibold text-slate-950">
                       Short explanation:
-                    </span>{" "}
-                    {item.short_explanation}
+                    </span>
                   </p>
+                  <MarkdownContent content={item.short_explanation} />
                   <details className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                     <summary className="cursor-pointer font-semibold text-slate-950">
                       Detailed explanation
                     </summary>
-                    <p className="mt-2 text-slate-700">{item.detailed_explanation}</p>
+                    <div className="mt-2 text-slate-700">
+                      <MarkdownContent content={item.detailed_explanation} />
+                    </div>
                   </details>
                   {item.why_others_are_wrong.length > 0 ? (
                     <details className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -494,7 +502,12 @@ export function PracticeQuiz({
           );
         })}
       </div>
-      <QuizReview analysis={analysis} totalQuestions={quiz.length} />
+      <QuizReview
+        analysis={analysis}
+        totalQuestions={quiz.length}
+        isTutorBusy={isTutorBusy}
+        onAskTutor={onAskTutor}
+      />
     </div>
   );
 }
@@ -545,6 +558,8 @@ function PerformanceList({ buckets, emptyMessage }: PerformanceListProps) {
 type QuizReviewProps = {
   analysis: QuizAnalysis;
   totalQuestions: number;
+  isTutorBusy: boolean;
+  onAskTutor: (question: string) => void;
 };
 
 function getReportStatus(accuracy: number) {
@@ -571,7 +586,20 @@ function getReportStatus(accuracy: number) {
   };
 }
 
-function QuizReview({ analysis, totalQuestions }: QuizReviewProps) {
+function buildWeakTopicTutorPrompt(topic: string) {
+  return `Explain ${topic} based on this document. Focus on why I may have missed this topic and give me a concise study strategy.`;
+}
+
+function buildMissedQuestionTutorPrompt(question: MissedQuestion) {
+  return `I missed this question: ${question.question}. The correct answer is ${question.correctAnswer}. Explain why the correct answer is right and what misconception may have led to my mistake.`;
+}
+
+function QuizReview({
+  analysis,
+  totalQuestions,
+  isTutorBusy,
+  onAskTutor,
+}: QuizReviewProps) {
   if (analysis.totalSubmitted < totalQuestions) {
     return null;
   }
@@ -622,6 +650,14 @@ function QuizReview({ analysis, totalQuestions }: QuizReviewProps) {
                   {topic.correct} / {topic.submitted} correct
                 </p>
                 <p className="text-red-700">{topic.accuracy}% accuracy</p>
+                <button
+                  type="button"
+                  disabled={isTutorBusy}
+                  onClick={() => onAskTutor(buildWeakTopicTutorPrompt(topic.name))}
+                  className="mt-3 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-red-100 disabled:text-red-300"
+                >
+                  Ask Tutor
+                </button>
               </div>
             ))}
           </div>
@@ -674,6 +710,14 @@ function QuizReview({ analysis, totalQuestions }: QuizReviewProps) {
                   <span className="font-semibold">Correct answer:</span>{" "}
                   {question.correctAnswer}
                 </p>
+                <button
+                  type="button"
+                  disabled={isTutorBusy}
+                  onClick={() => onAskTutor(buildMissedQuestionTutorPrompt(question))}
+                  className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  Review with Tutor
+                </button>
               </article>
             ))}
           </div>
@@ -717,9 +761,11 @@ type AskTutorProps = {
   documentId?: string;
   messages: ChatMessage[];
   inputValue: string;
+  answerMode: AnswerMode;
   isLoading: boolean;
   error: string;
   onInputChange: (value: string) => void;
+  onAnswerModeChange: (mode: AnswerMode) => void;
   onAsk: (question?: string) => void;
 };
 
@@ -729,13 +775,21 @@ const EXAMPLE_QUESTIONS = [
   "What should I review first?",
 ];
 
+const ANSWER_MODES: Array<{ value: AnswerMode; label: string }> = [
+  { value: "concise", label: "Concise" },
+  { value: "step_by_step", label: "Step-by-step" },
+  { value: "exam_answer", label: "Exam Answer" },
+];
+
 export function AskTutor({
   documentId,
   messages,
   inputValue,
+  answerMode,
   isLoading,
   error,
   onInputChange,
+  onAnswerModeChange,
   onAsk,
 }: AskTutorProps) {
   const trimmedInput = inputValue.trim();
@@ -760,11 +814,35 @@ export function AskTutor({
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 p-5">
-        <h2 className="text-xl font-bold text-slate-950">Ask Tutor</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Ask questions about this uploaded course material.
-        </p>
+      <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-950">Ask Tutor</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Ask questions about this uploaded course material.
+          </p>
+        </div>
+        <div className="shrink-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Answer style
+          </p>
+          <div className="grid grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-1">
+            {ANSWER_MODES.map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                onClick={() => onAnswerModeChange(mode.value)}
+                className={[
+                  "rounded px-2 py-1.5 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2",
+                  answerMode === mode.value
+                    ? "bg-white text-teal-800 shadow-sm"
+                    : "text-slate-600 hover:bg-white/70",
+                ].join(" ")}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {!documentId ? (
@@ -823,7 +901,11 @@ export function AskTutor({
                       : "rounded-bl-md border border-slate-200 bg-white text-slate-800",
                   ].join(" ")}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {isUser ? (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  ) : (
+                    <MarkdownContent content={message.content} />
+                  )}
                   {showFollowups ? (
                     <div className="mt-3 border-t border-slate-100 pt-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -889,3 +971,4 @@ export function AskTutor({
     </div>
   );
 }
+

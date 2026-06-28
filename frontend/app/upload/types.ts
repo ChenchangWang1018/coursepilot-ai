@@ -55,6 +55,8 @@ export type ProcessingStage =
 
 export type ResultTab = "study" | "quiz" | "tutor";
 
+export type AnswerMode = "concise" | "step_by_step" | "exam_answer";
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";

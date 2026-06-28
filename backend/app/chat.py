@@ -61,19 +61,19 @@ def _get_answer_mode_instruction(answer_mode: AnswerMode) -> str:
         return (
             "Answer in a short, direct way. Avoid long explanations. Use bullet "
             "points only when helpful. Target 3 to 6 sentences unless the question "
-            "requires more."
+            "requires more. For math, physics, equations, formulas, proofs, or symbolic CS theory, use formulas only when they make the answer clearer."
         )
 
     if answer_mode == "exam_answer":
         return (
             "Provide a compact answer suitable for writing on an exam. Include proof "
             "templates or key steps when relevant. Avoid casual explanation. "
-            "Prioritize correctness and concision."
+            "Prioritize correctness and concision. Use compact equations and proof templates when relevant."
         )
 
     return (
         "Explain the reasoning clearly. Break down concepts in order. Teach like a "
-        "patient tutor while avoiding unnecessary length."
+        "patient tutor while avoiding unnecessary length. Use formulas naturally in derivations when they clarify the reasoning."
     )
 
 
@@ -111,7 +111,7 @@ def answer_document_question(
                         "references, but do not blindly repeat previous answers. If a "
                         "follow-up is ambiguous, ask a brief clarifying question. Return "
                         "only the requested structured JSON. Avoid overly long answers; "
-                        "the student can ask follow-up questions for more detail."
+                        "the student can ask follow-up questions for more detail. Use Markdown formatting. When explaining math, physics, equations, formulas, proofs, or symbolic CS theory, use LaTeX math by default. Use inline math exactly like $K=\\frac{1}{2}mv^2$. Use block math exactly with opening and closing double dollar signs on separate lines, with the equation between them. If an equation is important, prefer block math. Never write malformed math like $$K=\\frac{1}{2}mv^2$, $$a_c=\\frac{v^2}{r}$, or $T$$$. Avoid \\[...\\] and \\(...\\) delimiters. Never put dollar delimiters inside \\left or \\right; write \\left( ... \\right), not \\left$ ... \\right$. When defining variables, use a Markdown list format like - $T$: applied tension force, - $f_k$: kinetic friction force, - $m$: mass, and - $a$: acceleration. Do not write malformed inline math like $T$$$, $f_k$$$, $m$$$, or $a$$$. Use single dollar signs for inline math and double dollar signs only for block equations. Do not place punctuation or extra dollar signs immediately after inline math delimiters. Keep equations concise and readable, and do not overuse formulas in non-mathematical explanations."
                     ),
                 },
                 {
@@ -154,3 +154,4 @@ def answer_document_question(
             exc,
         )
         raise RuntimeError("Tutor answer generation failed.") from exc
+
