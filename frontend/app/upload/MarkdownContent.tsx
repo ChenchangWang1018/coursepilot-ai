@@ -36,6 +36,36 @@ function looksLikeMath(value: string) {
   );
 }
 
+function isLikelyProse(value: string) {
+  const words = value
+    .replace(/\\[a-zA-Z]+/g, " ")
+    .match(/\b[A-Za-z]{3,}\b/g) ?? [];
+
+  return words.length >= 4;
+}
+
+function wrapEquationFragmentsInProse(content: string) {
+  return content.replace(
+    /((?:\\[a-zA-Z]+(?:\s+[A-Za-z\\][A-Za-z0-9_{}\\^]*)?|[A-Za-z][A-Za-z0-9_{}\\^]*)(?:\s*[=<>]\s*)(?:(?!\s+(?:and|or)\s+(?:\\[a-zA-Z]+(?:\s+[A-Za-z\\][A-Za-z0-9_{}\\^]*)?|[A-Za-z][A-Za-z0-9_{}\\^]*)\s*[=<>]|[,.;]).)+)/g,
+    (match: string) => {
+      const formula = match.trim();
+      return looksLikeMath(formula) ? `$${formula}$` : match;
+    },
+  );
+}
+
+function normalizeDollarMathSegment(segment: string) {
+  const isBlock = segment.startsWith("$$") && segment.endsWith("$$");
+  const delimiterLength = isBlock ? 2 : 1;
+  const math = segment.slice(delimiterLength, -delimiterLength).trim();
+
+  if (!isLikelyProse(math)) {
+    return segment;
+  }
+
+  return wrapEquationFragmentsInProse(math);
+}
+
 function fixBrokenLeftRightDelimiters(content: string) {
   return content.replace(/\\left\s*\$([\s\S]*?)\\right\s*\$/g, (_match, math: string) =>
     `\\left(${math.trim()}\\right)`,
@@ -90,18 +120,18 @@ function normalizeBareBlockMath(content: string) {
     .replace(
       /(^|\n)[ \t]*\[[ \t]*\n([\s\S]*?)\n[ \t]*\][ \t]*(?=\n|$)/g,
       (match, prefix: string, math: string) =>
-        looksLikeMath(math) ? `${prefix}\n$$\n${math.trim()}\n$$\n` : match,
+        looksLikeMath(math) && !isLikelyProse(math) ? `${prefix}\n$$\n${math.trim()}\n$$\n` : match,
     )
     .replace(
       /(^|\n)[ \t]*\[[ \t]*([^\]\n]+?)[ \t]*\][ \t]*(?=\n|$)/g,
       (match, prefix: string, math: string) =>
-        looksLikeMath(math) ? `${prefix}\n$$\n${math.trim()}\n$$\n` : match,
+        looksLikeMath(math) && !isLikelyProse(math) ? `${prefix}\n$$\n${math.trim()}\n$$\n` : match,
     );
 }
 
 function normalizeBareInlineMath(content: string) {
   return content.replace(/\(([^()\n]+)\)/g, (match, math: string) =>
-    looksLikeMath(math) ? `$${math.trim()}$` : match,
+    looksLikeMath(math) && !isLikelyProse(math) ? `$${math.trim()}$` : match,
   );
 }
 
@@ -115,6 +145,7 @@ function wrapStandaloneMathLines(content: string) {
         !trimmed ||
         trimmed.startsWith("$") ||
         trimmed.endsWith("$") ||
+        isLikelyProse(trimmed) ||
         /^#{1,6}\s/.test(trimmed) ||
         /^[-*+]\s/.test(trimmed) ||
         /^\d+\.\s/.test(trimmed) ||
@@ -139,7 +170,7 @@ function normalizeTextSegment(content: string) {
   return splitDollarMath(content)
     .map((part) => {
       if (part.startsWith("$")) {
-        return part;
+        return normalizeDollarMathSegment(part);
       }
 
       return normalizeBareInlineMath(wrapStandaloneMathLines(normalizeBareBlockMath(part)));

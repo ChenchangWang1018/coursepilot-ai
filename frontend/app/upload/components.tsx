@@ -223,7 +223,7 @@ function SummaryList({ title, items, ordered = false }: SummaryListProps) {
         <ListTag className="mt-3 space-y-2 text-slate-700">
           {items.map((item) => (
             <li key={item} className="rounded-md bg-slate-50 px-3 py-2">
-              {item}
+              <MarkdownContent content={item} />
             </li>
           ))}
         </ListTag>
@@ -256,7 +256,9 @@ export function StudyGuide({ summary }: StudyGuideProps) {
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Overview
         </h3>
-        <p className="mt-2 leading-7 text-slate-700">{summary.overview}</p>
+        <div className="mt-2 leading-7 text-slate-700">
+          <MarkdownContent content={summary.overview} />
+        </div>
       </section>
 
       <div className="mt-6 grid gap-5 md:grid-cols-2">
@@ -275,9 +277,9 @@ export function StudyGuide({ summary }: StudyGuideProps) {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h4 className="font-semibold text-slate-950">{topic.name}</h4>
-                    <p className="mt-1 text-sm leading-6 text-slate-700">
-                      {topic.summary}
-                    </p>
+                    <div className="mt-1 text-sm leading-6 text-slate-700">
+                      <MarkdownContent content={topic.summary} />
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -288,9 +290,9 @@ export function StudyGuide({ summary }: StudyGuideProps) {
                   </button>
                 </div>
                 {openTopicDetails.includes(topic.name) ? (
-                  <p className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-slate-600">
-                    {topic.details}
-                  </p>
+                  <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-slate-600">
+                    <MarkdownContent content={topic.details} />
+                  </div>
                 ) : null}
               </article>
             ))}
