@@ -102,12 +102,13 @@ def answer_document_question(
                 {
                     "role": "system",
                     "content": (
-                        "You are a patient course tutor. Answer using the uploaded "
-                        "document as the main source. Explain concepts step by step. "
+                        "You are a patient course tutor. Answer using the retrieved "
+                        "document chunks as the main source. Explain concepts step by step. "
                         "If the document does not contain enough information, say that "
                         "clearly instead of inventing details. You may use general CS "
-                        "knowledge only to explain concepts already present in the "
-                        "document. Use recent chat history to resolve follow-up "
+                        "knowledge only to explain concepts already present in the retrieved "
+                        "chunks. Do not pretend an answer is supported if the retrieved chunks "
+                        "do not support it. Use recent chat history to resolve follow-up "
                         "references, but do not blindly repeat previous answers. If a "
                         "follow-up is ambiguous, ask a brief clarifying question. Return "
                         "only the requested structured JSON. Avoid overly long answers; "
@@ -117,7 +118,7 @@ def answer_document_question(
                 {
                     "role": "user",
                     "content": (
-                        "Uploaded document context:\n"
+                        "Retrieved document chunks:\n"
                         f"{context}\n\n"
                         "Recent conversation:\n"
                         f"{formatted_chat_history}\n\n"

@@ -10,6 +10,11 @@ from .chat import ChatHistoryMessage, answer_document_question
 from .document_store import get_document, save_document
 from .pdf import extract_pdf_text
 from .quiz import generate_quiz
+from .retrieval import (
+    create_document_chunks,
+    format_chunks_for_context,
+    retrieve_relevant_chunks,
+)
 from .summary import generate_study_summary
 
 logger = logging.getLogger("uvicorn.error")
@@ -56,8 +61,16 @@ def chat(request: ChatRequest) -> dict[str, str | list[str]]:
             len(question),
             min(len(request.chat_history), 6),
         )
+        retrieved_chunks = retrieve_relevant_chunks(question, document.chunks)
+        retrieved_chunk_indexes = [chunk.index for chunk in retrieved_chunks]
+        logger.info(
+            "CHAT_RETRIEVAL_SUCCEEDED document_id=%s retrieved_count=%d chunk_indexes=%s",
+            document_id,
+            len(retrieved_chunks),
+            retrieved_chunk_indexes,
+        )
         response = answer_document_question(
-            document.text,
+            format_chunks_for_context(retrieved_chunks),
             question,
             request.chat_history[-6:],
             request.answer_mode,
@@ -152,10 +165,17 @@ async def upload_pdf(
 
     try:
         logger.info("DOCUMENT_STORE_SAVE_STARTED filename=%r", filename)
+        chunks = create_document_chunks(full_text)
+        logger.info(
+            "DOCUMENT_CHUNKING_SUCCEEDED filename=%r chunk_count=%d",
+            filename,
+            len(chunks),
+        )
         document_id = save_document(
             filename=filename,
             text=full_text,
             metadata={"num_pages": num_pages},
+            chunks=chunks,
         )
         logger.info(
             "DOCUMENT_STORE_SAVE_SUCCEEDED filename=%r document_id=%s",
