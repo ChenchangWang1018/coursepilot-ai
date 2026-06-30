@@ -77,15 +77,10 @@ This is not embedding-based retrieval yet. It is designed to be deterministic, s
 
 ## Screenshots
 
-Screenshots will be added here as the UI is finalized.
-
-Suggested screenshots:
-
-- PDF upload and processing state
-- Study Guide tab
-- Practice Quiz tab
-- Quiz Report weak topic review
-- Ask Tutor answer with sources used
+<img width="2552" height="1274" alt="image" src="https://github.com/user-attachments/assets/1085fd37-64a6-4636-a9f6-c1a4564ec34d" />
+<img width="2552" height="1274" alt="image" src="https://github.com/user-attachments/assets/fb89c981-5994-4b52-924c-36c42e33e757" />
+<img width="2552" height="1274" alt="image" src="https://github.com/user-attachments/assets/b29dc3f7-d48f-4847-8ecc-ca3b9de96691" />
+<img width="2552" height="1274" alt="image" src="https://github.com/user-attachments/assets/06db44da-a3cc-4f27-9d94-53e0ca12e512" />
 
 ## Local Development Setup
 
