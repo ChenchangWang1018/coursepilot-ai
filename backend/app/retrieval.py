@@ -218,7 +218,24 @@ def retrieve_relevant_chunks(
     return [chunk for _score, _index, chunk in scored_chunks[:limit]]
 
 
+def has_keyword_match(question: str, chunks: list[DocumentChunk]) -> bool:
+    question_tokens = set(_tokenize(question))
+    if not question_tokens:
+        return False
+
+    return any(question_tokens & set(_tokenize(chunk.text)) for chunk in chunks)
+
+
 def format_chunks_for_context(chunks: list[DocumentChunk]) -> str:
     return "\n\n".join(
         f"[Chunk {chunk.index}]\n{chunk.text.strip()}" for chunk in chunks if chunk.text.strip()
     )
+
+
+def create_source_snippet(chunk: DocumentChunk, max_chars: int = 500) -> str:
+    text = re.sub(r"\s+", " ", chunk.text).strip()
+    if len(text) <= max_chars:
+        return text
+
+    snippet = text[:max_chars].rsplit(" ", 1)[0].strip()
+    return f"{snippet}..." if snippet else text[:max_chars].strip()

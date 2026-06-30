@@ -57,9 +57,16 @@ export type ResultTab = "study" | "quiz" | "tutor";
 
 export type AnswerMode = "concise" | "step_by_step" | "exam_answer";
 
+export type SourceSnippet = {
+  chunk_id: string;
+  index: number;
+  snippet: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   suggested_followups?: string[];
+  sources?: SourceSnippet[];
 };

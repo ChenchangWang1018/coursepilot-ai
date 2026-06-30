@@ -273,6 +273,7 @@ export default function UploadPage() {
           role: "assistant",
           content: data.answer,
           suggested_followups: data.suggested_followups ?? [],
+          sources: data.sources ?? [],
         },
       ]);
     } catch {

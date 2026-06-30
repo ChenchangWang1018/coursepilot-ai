@@ -12,7 +12,9 @@ from .pdf import extract_pdf_text
 from .quiz import generate_quiz
 from .retrieval import (
     create_document_chunks,
+    create_source_snippet,
     format_chunks_for_context,
+    has_keyword_match,
     retrieve_relevant_chunks,
 )
 from .summary import generate_study_summary
@@ -43,7 +45,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/chat")
-def chat(request: ChatRequest) -> dict[str, str | list[str]]:
+def chat(request: ChatRequest) -> dict[str, Any]:
     document_id = request.document_id.strip()
     question = request.question.strip()
 
@@ -75,8 +77,25 @@ def chat(request: ChatRequest) -> dict[str, str | list[str]]:
             request.chat_history[-6:],
             request.answer_mode,
         )
+        source_chunks = retrieved_chunks[:3] if has_keyword_match(question, retrieved_chunks) else []
+        sources = [
+            {
+                "chunk_id": chunk.chunk_id,
+                "index": chunk.index,
+                "snippet": snippet,
+            }
+            for chunk in source_chunks
+            if (snippet := create_source_snippet(chunk))
+        ]
+        source_indexes = [source["index"] for source in sources]
+        logger.info(
+            "CHAT_SOURCES_PREPARED document_id=%s source_count=%d source_indexes=%s",
+            document_id,
+            len(sources),
+            source_indexes,
+        )
         logger.info("CHAT_ANSWER_SUCCEEDED document_id=%s", document_id)
-        return response
+        return {**response, "sources": sources}
     except ValueError as exc:
         logger.exception(
             "CHAT_ANSWER_FAILED: %s: %s",

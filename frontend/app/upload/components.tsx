@@ -885,6 +885,7 @@ export function AskTutor({
         <div className="space-y-4">
           {messages.map((message) => {
             const isUser = message.role === "user";
+            const showSources = !isUser && Boolean(message.sources?.length);
             const showFollowups =
               !isUser &&
               latestAssistantMessage?.id === message.id &&
@@ -908,6 +909,28 @@ export function AskTutor({
                   ) : (
                     <MarkdownContent content={message.content} />
                   )}
+                  {showSources ? (
+                    <div className="mt-3 border-t border-slate-100 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Sources used
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {message.sources?.map((source, index) => (
+                          <div
+                            key={`${source.chunk_id}-${source.index}`}
+                            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                          >
+                            <p className="font-semibold text-slate-700">
+                              {index + 1}. Chunk {source.index}
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap break-words leading-5">
+                              &quot;{source.snippet}&quot;
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {showFollowups ? (
                     <div className="mt-3 border-t border-slate-100 pt-3">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
